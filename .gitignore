@@ -1,0 +1,9 @@
+# 运行时生成/个人数据，不入库
+config.json
+polished.json
+log.txt
+lastcmd.txt
+
+# 构建产物
+*.exe
+*.pdb

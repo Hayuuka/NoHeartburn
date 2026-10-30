@@ -1,0 +1,19 @@
+# csc 响应文件（由 build.bat 生成使用）
+/codepage:65001
+/target:winexe
+/optimize+
+/out:HomeworkReminder.exe
+/r:System.Windows.Forms.dll
+/r:System.Drawing.dll
+/r:System.Core.dll
+/r:System.Runtime.WindowsRuntime.dll
+/r:"C:\Windows\Microsoft.NET\assembly\GAC_MSIL\System.Runtime\v4.0_4.0.0.0__b03f5f7f11d50a3a\System.Runtime.dll"
+/r:"C:\Windows\System32\WinMetadata\Windows.Foundation.winmd"
+/r:"C:\Windows\System32\WinMetadata\Windows.Data.winmd"
+/r:"C:\Windows\System32\WinMetadata\Windows.UI.winmd"
+/r:"C:\Windows\Microsoft.NET\assembly\GAC_MSIL\UIAutomationClient\v4.0_4.0.0.0__31bf3856ad364e35\UIAutomationClient.dll"
+/r:"C:\Windows\Microsoft.NET\assembly\GAC_MSIL\UIAutomationTypes\v4.0_4.0.0.0__31bf3856ad364e35\UIAutomationTypes.dll"
+/r:"C:\Windows\Microsoft.NET\assembly\GAC_MSIL\WindowsBase\v4.0_4.0.0.0__31bf3856ad364e35\WindowsBase.dll"
+/r:Microsoft.CSharp.dll
+/r:System.Web.Extensions.dll
+Program.cs
