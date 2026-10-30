@@ -58,10 +58,7 @@ build.bat
   不能保证 100% 命中（Windows 没有全局 API 直接知道你往浏览器拖了哪个文件）
 - 通知按钮点击第一次可能触发系统的自定义协议确认框，勾选「始终允许」后不再出现
 
-## 隐私
 
-`config.json`（含你的学号姓名）、`polished.json`、`log.txt` 等运行时文件均被
-`.gitignore` 排除，不会进入仓库。
 
 ## License
 
