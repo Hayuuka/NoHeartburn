@@ -2,7 +2,7 @@
 /codepage:65001
 /target:winexe
 /optimize+
-/out:HomeworkReminder.exe
+/out:NoHeartburn.exe
 /r:System.Windows.Forms.dll
 /r:System.Drawing.dll
 /r:System.Core.dll

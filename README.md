@@ -1,52 +1,68 @@
-# HomeworkReminder —— 作业润色提醒
+# NoHeartburn —— 作业润色提醒
 
 托盘常驻小工具：当你**双击**或**拖拽**一个文件名里带你学号/姓名的 doc/docx/pdf 时，
-提醒你这份作业是否已经润色过，防止忘了润色就交作业。
+通过 Win11 系统通知提醒你这份作业是否已经润色过，防止忘了润色就交作业。
 
-## 使用步骤
+## 功能
 
-1. 双击 `HomeworkReminder.exe` 运行（托盘会出现蓝色 ✓ 图标）。
-2. 首次运行托盘会弹气泡提示：右键托盘图标 →「编辑配置 (config.json)」，把
-   `StudentId` 和 `StudentName` 改成你的学号和姓名（也可以在 `Aliases` 里加别的
-   匹配关键词，比如英文名、常用文件名片段）。**改完即生效，不用重启。**
-3. 润色完一份作业后，下次再打开/拖动它时会弹窗，点「**标记为已润色**」即可，
-   之后这个文件就只会弹「已润色 ✅」的气泡，不再弹窗警告。
+- **双击 / 拖拽检测**：全局鼠标钩子 + Shell COM / UI Automation 读取资源管理器（及桌面）中当前操作的文件
+- **关键词匹配**：文件名含学号 / 姓名 / 自定义别名时触发提醒
+- **润色记录**：本地 `polished.json` 按文件内容 SHA-256 记录，改文件名也能认出来
+- **Win11 系统通知**：未润色 → 带「标记为已润色」按钮的 toast（协议激活回调）；已润色 → 静默通知
+- **防打扰**：同一文件冷却时间（默认 15 分钟）、单一样式（toast / 程序弹窗二选一）、暂停开关
+- **低占用**：单文件 exe，托盘常驻，内存 ~20 MB，空闲 CPU 为 0
 
-## 记录原理
+## 快速开始
 
-- 润色记录存在同目录的 `polished.json`，按**文件内容 SHA-256** 匹配，改文件名也能认出来。
-- 防打扰机制：
-  - 同一文件 15 分钟内（`CooldownMinutes` 可调）只提醒一次；
-  - 已润色的文件只弹自动消失的气泡，不弹窗；
-  - 一次操作最多提醒 3 个文件；
-  - 弹窗 30 秒无操作自动关闭；托盘右键可以「暂停提醒」。
+1. 克隆本仓库（或从 Releases 下载 exe）
+2. `copy config.example.json config.json`，填入你的学号 / 姓名
+3. 运行 `build.bat`（仅在从源码构建时需要；Releases 的 exe 可直接用）
+4. 双击 exe，托盘出现图标即运行中
 
-## 托盘右键菜单
+## 配置（config.json）
 
-| 菜单项 | 作用 |
+| 字段 | 说明 |
 |---|---|
-| 暂停提醒 / 恢复提醒 | 临时停用/启用检测 |
-| 开机自启 | 写入/删除 HKCU 注册表 Run 项 |
-| 手动标记文件为已润色… | 不经过弹窗，直接选文件标记 |
-| 编辑配置 | 用记事本打开 config.json |
-| 查看润色记录 | 定位 polished.json |
-| 退出 | 结束程序 |
+| `StudentId` / `StudentName` | 触发提醒的关键词（文件名包含即触发），必填 |
+| `Aliases` | 额外关键词，如英文名、常用文件名片段 |
+| `NotificationStyle` | `toast`（Win11 系统通知，默认）或 `popup`（程序弹窗），二选一 |
+| `DoubleClickDetect` / `DragDetect` | 分别开关双击 / 拖拽检测 |
+| `RemindWhenPolished` | 已润色的文件是否仍弹通知 |
+| `CooldownMinutes` | 同一文件两次提醒的最小间隔 |
+| `DebugLog` | 写 `log.txt` 排查日志 |
+
+配置改动即时生效，无需重启。
+
+## 实现说明
+
+- **双击检测**：低级鼠标钩子收不到系统合成的 `WM_LBUTTONDBLCLK`，程序在钩子内自行判断
+  （同位置、系统双击时限内连续两次按下）
+- **通知按钮回调**：toast 的 `<action>` 用 `activationType="protocol"` +
+  自定义 URI 协议（`noheartburn://`）回传，无需 COM 激活器（LocalServer32 /
+  INotificationActivationCallback）；协议在 HKCU 注册，无需管理员权限
+- **通知来源**：启动时在开始菜单创建带 AppUserModelID 的快捷方式
+  （内存构建 ShellLink → QI IPropertyStore 写 AUMID → IPersistFile.Save 一次性落盘）
+
+## 从源码构建
+
+```
+build.bat
+```
+
+使用系统自带 .NET Framework 4.x 的 `csc.exe`，无需安装 Visual Studio / SDK；
+任何 Windows 10/11 机器可直接构建（脚本内引用路径均为系统标准路径）。
 
 ## 已知限制
 
-- 往**浏览器网页上传框**拖拽时，程序是通过「拖拽起点 + 放下动作」推断的，
-  不能保证 100% 命中（Windows 没有全局 API 直接知道你往浏览器拖了哪个文件）。
-- 文件在资源管理器或桌面上的双击/拖拽检测最可靠；如果 UIA 只拿到显示名
-  （比如扩展名被隐藏），程序会在桌面/文档/下载目录里找同名文件来算哈希，
-  找不到就按文件名匹配记录。
-- 内存占用约 15~25 MB，空闲时 CPU 基本为 0。
+- 往浏览器网页上传框拖拽时，程序通过「拖拽起点 + 放下动作」推断文件，
+  不能保证 100% 命中（Windows 没有全局 API 直接知道你往浏览器拖了哪个文件）
+- 通知按钮点击第一次可能触发系统的自定义协议确认框，勾选「始终允许」后不再出现
 
-## 重新编译
+## 隐私
 
-改了 `Program.cs` 后运行 `build.bat`，或：
+`config.json`（含你的学号姓名）、`polished.json`、`log.txt` 等运行时文件均被
+`.gitignore` 排除，不会进入仓库。
 
-```
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe @compile.rsp
-```
+## License
 
-（用的是系统自带的 .NET Framework C# 编译器，无需安装任何东西。）
+见 LICENSE。

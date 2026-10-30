@@ -1,4 +1,4 @@
-// HomeworkReminder —— 作业润色提醒（托盘常驻，低占用，单文件）
+// NoHeartburn —— 作业润色提醒（托盘常驻，低占用，单文件）
 //
 // 工作方式：
 //   1. 全局鼠标钩子检测「双击文档」和「拖拽放下」两个动作；
@@ -24,17 +24,18 @@ using Microsoft.Win32;
 using Windows.Data.Xml.Dom;
 using Windows.UI.Notifications;
 
-namespace HomeworkReminder
+namespace NoHeartburn
 {
     internal static class Program
     {
         [STAThread]
         private static void Main(string[] args)
         {
-            // 协议激活入口（toast 按钮点击 → homeworkreminder:// URI → 本程序命令行）
+            // 协议激活入口（toast 按钮点击 → noheartburn:// URI → 本程序命令行）
             string pendingCommand = null;
             if (args != null && args.Length > 0 && args[0] != null &&
-                args[0].StartsWith("homeworkreminder://", StringComparison.OrdinalIgnoreCase))
+                (args[0].StartsWith("noheartburn://", StringComparison.OrdinalIgnoreCase) ||
+                 args[0].StartsWith("homeworkreminder://", StringComparison.OrdinalIgnoreCase))) // 旧协议别名，兼容旧 toast
             {
                 pendingCommand = args[0];
                 try
@@ -43,7 +44,7 @@ namespace HomeworkReminder
                 }
                 catch { }
                 EventWaitHandle existing;
-                if (EventWaitHandle.TryOpenExisting("HomeworkReminder_Command", out existing))
+                if (EventWaitHandle.TryOpenExisting("NoHeartburn_Command", out existing))
                 {
                     try { existing.Set(); } finally { existing.Dispose(); }
                     return; // 已有常驻实例，转发后退出
@@ -52,7 +53,7 @@ namespace HomeworkReminder
             }
 
             bool createdNew;
-            Mutex mutex = new Mutex(true, "HomeworkReminder_SingleInstance", out createdNew);
+            Mutex mutex = new Mutex(true, "NoHeartburn_SingleInstance", out createdNew);
             if (!createdNew) return;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -348,7 +349,7 @@ namespace HomeworkReminder
 
             _tray = new NotifyIcon();
             _tray.Icon = CreateIcon();
-            _tray.Text = "作业润色提醒";
+            _tray.Text = "NoHeartburn 作业润色提醒";
             _tray.Visible = true;
             _tray.ContextMenu = BuildMenu();
 
@@ -357,7 +358,7 @@ namespace HomeworkReminder
             _hook.LeftDoubleClick += OnDoubleClick;
             _hook.DragDropped += OnDragDropped;
             EnsureToastAumid(); // 注册 Win11 系统通知来源（开始菜单快捷方式 + AppUserModelID）
-            EnsureProtocol();   // 注册 homeworkreminder:// 协议（toast 按钮回调用）
+            EnsureProtocol();   // 注册 noheartburn:// 协议（toast 按钮回调用）
             StartCommandLoop();
             Log("程序启动, exe=" + Application.ExecutablePath +
                 " hook=" + (_hook.IsInstalled ? "已安装" : "安装失败!") +
@@ -595,7 +596,7 @@ namespace HomeworkReminder
                         {
                             // toast 上带「标记为已润色」按钮（协议激活回传）；arguments 有 256 字符限制，
                             // 所以只带 h(哈希) 和 nk(去扩展名文件名)，足够写记录
-                            string markUri = "homeworkreminder://mark?h=" + Uri.EscapeDataString(h ?? "") +
+                            string markUri = "noheartburn://mark?h=" + Uri.EscapeDataString(h ?? "") +
                                              "&nk=" + Uri.EscapeDataString(nk);
                             shown = ShowToast("⚠ 作业未润色提醒",
                                 d + "\n未找到润色记录，提交前请确认是否已润色。", markUri);
@@ -747,21 +748,27 @@ namespace HomeworkReminder
         {
             _paused = !_paused;
             _pauseItem.Text = _paused ? "恢复提醒" : "暂停提醒";
-            _tray.Text = _paused ? "作业润色提醒（已暂停）" : "作业润色提醒";
+            _tray.Text = _paused ? "NoHeartburn（已暂停）" : "NoHeartburn 作业润色提醒";
         }
 
         private bool IsAutostart()
         {
             using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RunKey))
-                return k != null && k.GetValue("HomeworkReminder") != null;
+                return k != null && (k.GetValue("NoHeartburn") != null ||
+                    k.GetValue("HomeworkReminder") != null || k.GetValue("AlternateWarning") != null);
         }
 
         private void ToggleAutostart()
         {
             using (RegistryKey k = Registry.CurrentUser.CreateSubKey(RunKey))
             {
-                if (IsAutostart()) k.DeleteValue("HomeworkReminder", false);
-                else k.SetValue("HomeworkReminder", "\"" + Application.ExecutablePath + "\"");
+                if (IsAutostart())
+                {
+                    k.DeleteValue("NoHeartburn", false);
+                    k.DeleteValue("HomeworkReminder", false);  // 清理改名前的旧自启项
+                    k.DeleteValue("AlternateWarning", false);
+                }
+                else k.SetValue("NoHeartburn", "\"" + Application.ExecutablePath + "\"");
             }
             _autostartItem.Checked = IsAutostart();
         }
@@ -823,7 +830,7 @@ namespace HomeworkReminder
         private readonly object _logLock = new object();
 
         // ---------- Win11 系统通知（Toast）----------
-        private const string ToastAumid = "HomeworkReminder.Reminder";
+        private const string ToastAumid = "NoHeartburn.Reminder";
         private bool _toastAvailable;
 
         // Win11 要求通知来源是开始菜单里带 AppUserModelID 的快捷方式，启动时自动创建。
@@ -834,7 +841,16 @@ namespace HomeworkReminder
             {
                 string programs = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), "Programs");
-                string lnk = Path.Combine(programs, "HomeworkReminder.lnk");
+                string lnk = Path.Combine(programs, "NoHeartburn.lnk");
+                try
+                {
+                    // 清理改名前遗留的旧快捷方式
+                    string legacy = Path.Combine(programs, "HomeworkReminder.lnk");
+                    if (File.Exists(legacy)) File.Delete(legacy);
+                    legacy = Path.Combine(programs, "AlternateWarning.lnk");
+                    if (File.Exists(legacy)) File.Delete(legacy);
+                }
+                catch { }
 
                 Type linkType = Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046")); // CLSID_ShellLink
                 object link = Activator.CreateInstance(linkType);
@@ -869,7 +885,7 @@ namespace HomeworkReminder
             }
         }
 
-        // 发系统 Toast。markUri 非空时带「标记为已润色」按钮（协议激活，点击回调经 homeworkreminder:// 回传）。
+        // 发系统 Toast。markUri 非空时带「标记为已润色」按钮（协议激活，点击回调经 noheartburn:// 回传）。
         // 失败返回 false，由调用方决定降级。
         private bool ShowToast(string title, string body, string markUri)
         {
@@ -877,7 +893,7 @@ namespace HomeworkReminder
             try
             {
                 StringBuilder xml = new StringBuilder();
-                xml.Append("<toast activationType=\"protocol\" launch=\"homeworkreminder://ignore\">");
+                xml.Append("<toast activationType=\"protocol\" launch=\"noheartburn://ignore\">");
                 xml.Append("<visual><binding template=\"ToastGeneric\">");
                 xml.Append("<text>" + XmlEscape(title) + "</text>");
                 string[] lines = (body ?? "").Split('\n');
@@ -888,7 +904,7 @@ namespace HomeworkReminder
                 {
                     xml.Append("<actions>");
                     xml.Append("<action content=\"标记为已润色\" arguments=\"" + XmlEscape(markUri) + "\" activationType=\"protocol\"/>");
-                    xml.Append("<action content=\"忽略\" arguments=\"homeworkreminder://ignore\" activationType=\"protocol\"/>");
+                    xml.Append("<action content=\"忽略\" arguments=\"noheartburn://ignore\" activationType=\"protocol\"/>");
                     xml.Append("</actions>");
                 }
                 xml.Append("</toast>");
@@ -911,32 +927,44 @@ namespace HomeworkReminder
             return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
         }
 
-        // 注册 homeworkreminder:// 协议 → 本程序（HKCU，无需管理员）。
+        // 注册 URI 协议 → 本程序（HKCU，无需管理员）。
         // 关键：根键下必须有 "URL Protocol" 空字符串值，否则系统不认这是 URL 协议，
-        // 点击按钮会跳到 Microsoft Store 找应用
+        // 点击按钮会跳到 Microsoft Store 找应用。
+        // noheartburn 为主协议；homeworkreminder 是改名前的旧协议，保留注册以兼容
+        // 通知中心里残留的旧 toast，两者解析到同一命令格式。
         private void EnsureProtocol()
         {
             try
             {
-                using (RegistryKey k = Registry.CurrentUser.CreateSubKey("Software\\Classes\\homeworkreminder"))
+                RegisterUriProtocol("noheartburn");
+                RegisterUriProtocol("homeworkreminder"); // 旧协议别名，兼容通知中心残留的旧 toast
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey("Software\\Classes", true))
                 {
-                    k.SetValue(null, "HomeworkReminder Protocol");
-                    k.SetValue("URL Protocol", "");
-                }
-                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(
-                    "Software\\Classes\\homeworkreminder\\shell\\open\\command"))
-                {
-                    k.SetValue(null, "\"" + Application.ExecutablePath + "\" \"%1\"");
+                    if (k != null) k.DeleteSubKeyTree("alternativewarning", false); // 清掉中间改名版注册的协议
                 }
             }
             catch (Exception ex) { Log("注册协议失败: " + ex.Message); }
+        }
+
+        private static void RegisterUriProtocol(string scheme)
+        {
+            using (RegistryKey k = Registry.CurrentUser.CreateSubKey("Software\\Classes\\" + scheme))
+            {
+                k.SetValue(null, "NoHeartburn Protocol");
+                k.SetValue("URL Protocol", "");
+            }
+            using (RegistryKey k = Registry.CurrentUser.CreateSubKey(
+                "Software\\Classes\\" + scheme + "\\shell\\open\\command"))
+            {
+                k.SetValue(null, "\"" + Application.ExecutablePath + "\" \"%1\"");
+            }
         }
 
         private void StartCommandLoop()
         {
             try
             {
-                _cmdEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "HomeworkReminder_Command");
+                _cmdEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "NoHeartburn_Command");
             }
             catch (Exception ex) { Log("创建命令事件失败: " + ex.Message); return; }
             Thread t = new Thread(CommandLoop);
@@ -961,7 +989,8 @@ namespace HomeworkReminder
             {
                 string cmd = File.ReadAllText(Path.Combine(_baseDir, "lastcmd.txt")).Trim();
                 Log("收到通知按钮命令: " + cmd);
-                if (cmd.IndexOf("homeworkreminder://mark", StringComparison.OrdinalIgnoreCase) != 0)
+                if (cmd.IndexOf("noheartburn://mark", StringComparison.OrdinalIgnoreCase) != 0 &&
+                    cmd.IndexOf("homeworkreminder://mark", StringComparison.OrdinalIgnoreCase) != 0)
                     return;
 
                 string q = cmd.Substring(cmd.IndexOf('?') + 1);
@@ -1085,7 +1114,7 @@ namespace HomeworkReminder
             ShowInTaskbar = false;
             TopMost = true;
             StartPosition = FormStartPosition.Manual;
-            Text = "作业润色提醒";
+            Text = "NoHeartburn 作业润色提醒";
             Font = new Font("微软雅黑", 9f);
             ClientSize = new Size(430, 150);
 
